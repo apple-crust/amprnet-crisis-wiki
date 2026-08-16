@@ -1,0 +1,169 @@
+---
+- name: Install and configure AMPRNet Sverige DokuWiki and Syncthing server
+  hosts: central
+  become: yes
+
+  tasks:
+    - name: Update apt package cache
+      ansible-builtin.apt:
+        update_cache: yes
+        cahce_valid_time: 3600
+
+    - name: Install Apache2, PHP, and PHP extensions
+      ansible.builtin.apt:
+        name:
+          - apache2
+          - php
+          - libapache2-mod-php
+          - php-xml
+          - php-mbstring
+        state: present
+    
+    - name: Enable Apache rewrite module
+      community.general.apache2_module:
+        name: rewrite
+        state: present
+
+    - name: Check if Apache default site is enabled
+      ansible.builtin.stat:
+        path: /etc/apache2/sites-enabled/000-default.conf
+      register: default_site_enabled
+
+    - name: Disable Apache default site
+      ansible.builtin.command:
+        cmd: a2dissite 000-default.conf
+      when: default_site_enabled.stat.exists
+
+    - name: Configure Apache for DokuWiki
+      ansible.builtin.copy:
+        dest: /etc/apache2/sites-available/dokuwiki.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          <VirtualHost *:80>
+              ServerName {{ ansible_host | default(inventory_hostname) }}
+              DocumentRoot /var/www/html
+
+              <Directory /var/www/html>
+                  Options FollowSymLinks
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+
+              ErrorLog ${APACHE_LOG_DIR}/dokuwiki_error.log
+              CustomLog ${APACHE_LOG_DIR}/dokuwiki_access.log combined
+          </VirtualHost>
+        notify: Reload Apache
+
+    - name: Enable DokuWiki Apache site
+      ansible.builtin.command:
+        cmd: a2ensite dokuwiki.conf
+      register: enable_dokuwiki_site
+      changed_when: "'already enabled' not in enable_dokuwiki_site.stdout"
+
+    - name: Ensure Apache web server is running and enabled on boot
+      service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Download and extract latest DokuWiki stable release
+      ansible.builtin.unarchive:
+        src: https://download.dokuwiki.org/src/dokuwiki/dokuwiki-stable.tgz
+        dest: /var/www/html
+        remote_src: yes
+        extra_opts:
+          - --strip-components=1
+        creates: /var/www/html/doku.php
+
+    - name: Remove Apache default index page
+      file:
+        path: /var/www/html/index.html
+        state: absent
+
+    - name: Set correct permissions and ownership for Apache web root
+      file:
+        path: /var/www/html
+        owner: www-data
+        group: www-data
+        recurse: yes
+        state: directory
+
+    - name: Install ACL support
+      ansible.builtin.apt:
+        name: acl
+        state: present
+
+    - name: Ensure DokuWiki pages are writable by www-data group
+      ansible.builtin.command:
+        cmd: setfacl -R -m g:www-data:rwx /var/www/html/data/pages
+
+    - name: Set default ACL for newly created DokuWiki pages and directories
+      ansible.builtin.command:
+        cmd: setfacl -R -d -m g:www-data:rwx /var/www/html/data/pages
+
+    - name: Allow Syncthing group access to DokuWiki pages
+      ansible.builtin.file:
+        path: /var/www/html/data/pages
+        group: www-data
+        mode: "g+rwX"
+        recurse: yes
+
+    - name: Create DokuWiki distribution directories
+      ansible.builtin.file:
+        path: "/var/www/html/data/pages/{{ item }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0775"
+      loop:
+        - global
+        - kommun
+        - trygghetspunkt
+
+    - name: Install Syncthing package
+      ansible.builtin.apt:
+        name: syncthing
+        state: present
+
+    - name: Create Syncthing service user
+      ansible.builtin.user:
+        name: crisis-sync
+        system: false
+        create_home: true
+        shell: /bin/bash
+        state: present
+
+    - name: Add Syncthing user to www-data group
+      ansible.builtin.user:
+        name: crisis-sync
+        groups: www-data
+        append: yes
+
+    - name: Create Syncthing configuration directory
+      ansible.builtin.file:
+        path: /home/crisis-sync/.config/syncthing
+        state: directory
+        owner: crisis-sync
+        group: crisis-sync
+        mode: '0700'
+
+    - name: Stop and disable Syncthing root service
+      ansible.builtin.systemd:
+        name: syncthing@root
+        state: stopped
+        enabled: no
+
+    - name: Enable and start Syncthing systemd service for crisis-sync
+      ansible.builtin.systemd:
+        name: syncthing@crisis-sync
+        state: started
+        enabled: yes
+
+  handlers:
+
+    - name: Reload Apache
+      ansible.builtin.service:
+        name: apache2
+        state: reloaded
