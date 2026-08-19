@@ -5,9 +5,9 @@
 
   tasks:
     - name: Update apt package cache
-      ansible-builtin.apt:
+      ansible.builtin.apt:
         update_cache: yes
-        cahce_valid_time: 3600
+        cache_valid_time: 3600
 
     - name: Install Apache2, PHP, and PHP extensions
       ansible.builtin.apt:
@@ -54,7 +54,7 @@
               ErrorLog ${APACHE_LOG_DIR}/dokuwiki_error.log
               CustomLog ${APACHE_LOG_DIR}/dokuwiki_access.log combined
           </VirtualHost>
-        notify: Reload Apache
+      notify: Reload Apache
 
     - name: Enable DokuWiki Apache site
       ansible.builtin.command:
