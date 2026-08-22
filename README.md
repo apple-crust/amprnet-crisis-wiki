@@ -6,13 +6,11 @@ The system uses:
 
 - **DokuWiki** for creating and maintaining crisis-related information.
 - **Syncthing** for distributing selected DokuWiki content to local nodes.
-- **Ansible** for automating the installation and configuration of the central server.
+- **Ansible** for automating the central server installation.
 
-The purpose of this repository is to provide a reproducible Ansible-based installation of a central DokuWiki and Syncthing server for AMPRNet Sverige. The actual Syncthing distribution setup is intentionally left to the administrator and is configured manually through the Syncthing web interface.
+The Syncthing distribution setup is intentionally left manual so that each deployment can decide which nodes receive which information.
 
 ## Architecture
-
-The central server contains a DokuWiki installation whose pages are stored as files on the server.
 
 ```text
 DokuWiki
@@ -25,23 +23,20 @@ DokuWiki
     │
     ▼
 Syncthing
-    │
     ├── Local node #1
     ├── Local node #2
     └── Other nodes
 ```
 
-Administrators decide manually which folders should be distributed to which nodes.
+Administrators manually decide which folders are distributed to each node.
 
-For example, one node might receive:
+Example:
 
 ```text
 global/
 kommun/norrtalje/
-trygghetspunkt/norrtalje/
+trygghetspunkt/norrtalje-1/
 ```
-
-while another node may receive a different selection of folders.
 
 ## Repository Structure
 
@@ -53,53 +48,35 @@ amprnet-crisis-wiki/
 └── .gitignore
 ```
 
-### `install.yml`
-
-The Ansible playbook that installs and configures the central server.
-
-### `inventory.ini`
-
-The Ansible inventory containing the central server's IP address and SSH username.
-
-### `README.md`
-
-Installation and administration instructions.
-
-### `.gitignore`
-
-Prevents local files and other unnecessary data from being committed to the repository.
+- `install.yml` — Ansible playbook for installing and configuring the central server.
+- `inventory.ini` — Central server IP address and SSH username.
+- `README.md` — Installation and administration instructions.
+- `.gitignore` — Prevents unnecessary local files from being committed.
 
 ## Requirements
 
 ### Central server
 
-The server should have:
-
-- A supported Linux distribution (tested on Ubuntu Server 26.04).
-- SSH access from the computer running Ansible.
+- Supported Linux distribution (tested on Ubuntu Server 26.04).
+- SSH access from the Ansible workstation.
 - A user with `sudo` privileges.
-- Network access for downloading packages and the DokuWiki release.
 - An IP address reachable from the administrator's computer.
 
 ### Ansible workstation
 
-The computer running Ansible needs:
-
 - Ansible installed.
 - SSH access to the central server.
 
-## Installation
+# Installation
 
-### 1. Clone the repository
-
-Clone the repository on the computer that will be used to install the central server.
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/apple-crust/amprnet-crisis-wiki.git
 cd amprnet-crisis-wiki
 ```
 
-### 2. Configure the inventory
+## 2. Configure the inventory
 
 Open:
 
@@ -107,25 +84,16 @@ Open:
 nano inventory.ini
 ```
 
-Replace the IP address and username with the SSH details of the central server.
+Replace the placeholder IP address and username with the central server's SSH details.
 
-For example:
-
-```ini
-[central]
-192.0.2.10 ansible_user=your_username
-```
-
-could become:
+Example:
 
 ```ini
 [central]
 10.0.0.15 ansible_user=admin
 ```
 
-### 3. Test the Ansible connection
-
-Verify that Ansible can connect to the server:
+## 3. Test the Ansible connection
 
 ```bash
 ansible -i inventory.ini central -m ping -k -K
@@ -137,33 +105,32 @@ A successful connection should return:
 pong
 ```
 
-### 4. Check the playbook syntax
-
-Before running the installation, check the Ansible playbook syntax:
+## 4. Check the playbook syntax
 
 ```bash
 ansible-playbook -i inventory.ini install.yml --syntax-check
 ```
 
-### 5. Run the installation
+## 5. Run the installation
 
-Run:
+For the first installation:
 
 ```bash
-ansible-playbook -i inventory.ini install.yml -k -K
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.ini install.yml -k -K
 ```
+
+`ANSIBLE_HOST_KEY_CHECKING=False` disables Ansible SSH host key checking for this command.
 
 The playbook installs and configures:
 
 - Apache2
-- PHP
-- Required PHP extensions
+- PHP and required extensions
 - DokuWiki
 - ACL support
 - Syncthing
-- The `crisis-sync` service user
+- The `crisis-sync` user
 - Required permissions and ACLs
-- The DokuWiki page directories
+- DokuWiki page directories
 - The `syncthing@crisis-sync` systemd service
 
 The following directories are created automatically:
@@ -174,130 +141,104 @@ The following directories are created automatically:
 /var/www/html/data/pages/trygghetspunkt
 ```
 
-## DokuWiki
+## 6. Complete the DokuWiki installation
 
-After the Ansible installation has completed, open the central server's web address:
-
-```text
-http://<central-server-ip>/
-```
-
-Complete DokuWiki's initial web-based installation and create the administrator account.
-
-DokuWiki namespaces can then be used to organize information. 
-
-### Global information
-
-Information intended to be distributed generally can be placed under:
+After Ansible finishes, open:
 
 ```text
-global:
+http://<central-server-ip>/install.php
 ```
 
-For example:
+Complete the DokuWiki web installer and create the administrator account.
+
+## DokuWiki Structure
+
+The installation provides three base namespaces:
+
+```text
+global
+kommun
+trygghetspunkt
+```
+
+Examples:
 
 ```text
 global:crisisinformation
-```
-
-### Municipality information
-
-Municipality-specific information can be placed under:
-
-```text
-kommun:<municipality>:
-```
-
-For example:
-
-```text
 kommun:norrtalje:crisisinformation
-```
-
-DokuWiki automatically creates the corresponding namespace directory when content is created.
-
-### Safe point information
-
-Information related to a specific safe point can be organized under:
-
-```text
-trygghetspunkt:<municipality>:<safe-point>
-```
-
-For example:
-
-```text
 trygghetspunkt:norrtalje:point1
 ```
 
-The exact naming convention for municipalities and safe points can be determined by the people operating the installation.
+The exact naming conventions can be determined by the administrators operating the installation.
 
-## Syncthing
+# Syncthing
 
-Syncthing is installed as a system service running under the dedicated user:
+Syncthing runs as the dedicated system user:
 
 ```text
 crisis-sync
 ```
 
-The service is:
+and as the systemd service:
 
 ```text
 syncthing@crisis-sync
 ```
 
-and is configured to start automatically when the server boots.
+The service starts automatically when the server boots.
 
-The Syncthing web interface is normally available locally on:
+The Syncthing GUI is normally available locally at:
 
 ```text
 http://127.0.0.1:8384
 ```
 
-The GUI is intentionally **not exposed directly to the network** by the Ansible installation.
+The GUI is **not exposed directly to the network** by the Ansible installation.
 
-### Accessing the Syncthing GUI remotely
+## Accessing Syncthing remotely
 
-Administrators can use SSH port forwarding from their own computer.
-
-For example:
+Administrators can access the central server's Syncthing GUI from their own computers using SSH port forwarding:
 
 ```bash
 ssh -L 8384:127.0.0.1:8384 <username>@<central-server-ip>
 ```
 
-After connecting, open the following address in a web browser on the administrator's own computer:
+For example:
+
+```bash
+ssh -L 8384:127.0.0.1:8384 admin@10.0.0.15
+```
+
+Keep the SSH connection open and visit:
 
 ```text
 http://127.0.0.1:8384
 ```
 
-The administrator can then manage the central server's Syncthing instance without logging into the server's graphical environment.
+in the administrator's own browser. This allows administrators to manage the central Syncthing instance without exposing the GUI directly to the network.
 
-## Configuring Syncthing Nodes
+# Configuring Syncthing Nodes
 
-The connection between the central server and individual nodes is configured **manually** by the administrator.
+Node configuration is inentionally **manual**.
 
 The Ansible playbook does **not** configure:
 
 - Remote Device IDs
 - Syncthing folders
 - Folder sharing
-- Node-specific folder paths
+- Node-specific paths
 - Which nodes receive which information
 
-To configure a node, the administrator can:
+The administrator configures each node through the Syncthing GUI:
 
-1. Open the central server's Syncthing GUI.
-2. Add the node as a **Remote Device** using its Device ID.
-3. Create or select the appropriate Syncthing folder.
-4. Set the folder path on the central server.
-5. Share the folder with the appropriate remote device.
-6. Accept the folder on the remote node.
-7. Configure the local path on the remote node.
-8. Repeat as necessary for additional folders.
+1. Add the node as a **Remote Device** using its Device ID.
+2. Create or select the appropriate folder.
+3. Set the folder path on the central server.
+4. Share the folder with the appropriate node.
+5. Accept the folder on the remote node.
+6. Configure the local path on the remote node.
 
-For example, a central server might use:
+For example, the central server may use:
 
 ```text
 /var/www/html/data/pages/global
@@ -305,21 +246,13 @@ For example, a central server might use:
 /var/www/html/data/pages/trygghetspunkt/norrtalje
 ```
 
-A node can then be configured to receive only the folders relevant to that location.
+Each node can receive only the folders relevant to its location.
 
-This configuration is intentionally manual because each deployment may have different nodes, municipalities, safe points, and distribution requirements.
+# Permissions
 
-## Permissions
+DokuWiki is served by Apache using `www-data`.
 
-DokuWiki is served by Apache using the `www-data` user and group.
-
-Syncthing runs as:
-
-```text
-crisis-sync
-```
-
-The `crisis-sync` user is a member of the `www-data` group.
+Syncthing runs as `crisis-sync`, which is a member of the `www-data` group.
 
 ACLs are configured on:
 
@@ -329,42 +262,91 @@ ACLs are configured on:
 
 This allows both DokuWiki and Syncthing to access the page files required for synchronization.
 
-## What Ansible Automates
+# What Ansible Automates
 
-The playbook is responsible for creating a working central server environment.
+The playbook automates the installation and configuration of the central server:
 
-It automates:
-
-- Apache installation and configuration
-- PHP installation
-- DokuWiki installation
-- Apache configuration for DokuWiki
-- DokuWiki file ownership and permissions
+- Apache2
+- PHP and required extensions
+- DokuWiki
+- Apache configuration
+- DokuWiki ownership and permissions
 - ACL support
-- Creation of the base DokuWiki namespaces
-- Syncthing installation
-- Creation of the `crisis-sync` user
+- Base DokuWiki namespaces
+- Syncthing
+- `crisis-sync`
 - Syncthing permissions
-- Syncthing systemd service configuration
+- Syncthing systemd service
 
-## What Remains Manual
+# What Remains Manual
 
-The following tasks are intentionally performed by the administrator:
+The administrator is responsible for:
 
 - Completing the DokuWiki web installer
 - Creating DokuWiki administrator accounts
 - Configuring Syncthing authentication
-- Adding remote Syncthing devices
+- Adding remote devices
 - Configuring Syncthing folders
 - Selecting which folders are shared with each node
 - Configuring paths on remote nodes
-- Creating municipality-specific namespaces
-- Creating safe-point-specific namespaces
+- Creating municipality and safe-point namespaces
 - Managing the actual crisis information
 
-This separation keeps the Ansible installation generic while allowing each deployment to configure its own Syncthing topology.
+# Common Setup Issues
 
-## Useful Commands
+## Sudo permissions
+
+The playbook uses:
+
+```yaml
+become: yes
+```
+
+The SSH user therefore needs sufficient sudo privileges. Also, the newest version of sudo can cause timeout issues.
+
+If required, check the sudo configuration with:
+
+```bash
+sudo visudo
+```
+
+A possible configuration is:
+
+```text
+username ALL=(ALL) NOPASSWD:ALL
+```
+
+Replace `username` with the actual SSH username.
+
+> **Security note:** `NOPASSWD:ALL` grants unrestricted sudo access without requiring a password. A more restrictive sudo policy is preferable for production systems. You can however comment the solution above after the installation. 
+
+If passwordless sudo is configured, `-K` is not required:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.ini install.yml -k
+```
+
+## SSH host key verification
+
+If the first Ansible connection fails because the server's SSH host key is not yet known, use:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.ini install.yml -k -K
+```
+
+This disables host key checking for that command only.
+
+## DokuWiki installer
+
+If DokuWiki has not yet been initialized, open:
+
+```text
+http://<central-server-ip>/install.php
+```
+
+and complete the web installation.
+
+# Useful Commands
 
 ### Check Apache
 
@@ -384,7 +366,7 @@ sudo systemctl status syncthing@crisis-sync
 sudo ls -la /var/www/html/data/pages
 ```
 
-Expected base directories:
+Expected directories:
 
 ```text
 global
@@ -392,10 +374,16 @@ kommun
 trygghetspunkt
 ```
 
-### Check Ansible playbook syntax
+### Check Ansible syntax
 
 ```bash
 ansible-playbook -i inventory.ini install.yml --syntax-check
+```
+
+### Test the Ansible connection
+
+```bash
+ansible -i inventory.ini central -m ping -k -K
 ```
 
 ### Run the installation again
@@ -404,12 +392,17 @@ ansible-playbook -i inventory.ini install.yml --syntax-check
 ansible-playbook -i inventory.ini install.yml -k -K
 ```
 
-The playbook can be run again if necessary to ensure that the configured server state is present.
+The playbook can safely be run again when necessary to ensure the configured server state is present.
 
-## Project Goal
+# Project Goal
 
 The goal of this project is to provide AMPRNet Sverige with a **reproducible and easily deployable central crisis information server**.
 
-The central server provides the DokuWiki content and Syncthing distribution mechanism, while individual administrators retain control over the actual distribution topology.
+The installation provides:
 
-This allows different nodes to receive different subsets of the available information while keeping the central installation consistent across deployments.
+- A DokuWiki server for creating and maintaining crisis information.
+- A Syncthing service for distributing selected information to local nodes.
+- A consistent directory structure for global, municipality-specific, and safe-point information.
+- An Ansible-based installation that can be repeated on a new central server.
+
+The actual Syncthing distribution topology remains under administrator control. Each deployment can therefore decide which nodes receive which information while keeping the central server installation consistent.
