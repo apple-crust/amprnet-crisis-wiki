@@ -65,7 +65,14 @@ amprnet-crisis-wiki/
 ### Ansible workstation
 
 - Ansible installed.
+- The `community.general` Ansible collection installed.
 - SSH access to the central server.
+
+Install the required Ansible collection with:
+
+```bash
+ansible-galaxy collection install community.general
+```
 
 # Installation
 
